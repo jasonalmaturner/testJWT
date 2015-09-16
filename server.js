@@ -9,7 +9,8 @@ var jwt = require('jsonwebtoken');
 var config = require('./config');
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
-var callbackurl;
+var microserviceLookup = require('./microserviceLookup.js');
+
 // Mongoose models
 var User = require('./api/models/user');
 
@@ -18,10 +19,13 @@ var UserCtrl = require('./api/controllers/userController.js')
 
 
 var corsOptions = {
-  origin: 'http://localhost:8081'
+  origin: 'localhost:8081'
 };
 
+
+
 app.use(cors(corsOptions));
+app.use(express.static(__dirname + '/public'));
 
 passport.use(new LocalStrategy({
   usernameField: 'email'
@@ -141,6 +145,14 @@ app.get('/authfromserver2', function(req, res){
 });
 
 apiRoutes.post('/authenticate', function(req, res) {
+  if (req.query['bounce']) {
+    var parsedBounceArr = req.query.bounce.split('/')
+    console.log(parsedBounceArr);
+    var bounceHost = microserviceLookup[parsedBounceArr[0]] + parsedBounceArr[1];
+    console.log(bounceHost);
+    req.session.bounceTo = req.query.bounce
+    console.log(req.query.bounce)
+  }
   User.findOne({
     email: req.body.email
   }, function(err, user) {
@@ -159,20 +171,14 @@ apiRoutes.post('/authenticate', function(req, res) {
         }, app.get('superSecret'), {
           expiresInMinutes: 1440
         });
-           user.token = token;
+           user.jwtoken = token;
            user.save(function(err, user){
-              req.session.devMountainToken = token;
-              if(req.session.callbackurl){
-                var tempUrl = req.session.callbackurl;
-                req.session.callbackurl = '';
-                return res.redirect(tempUrl);
-              } else {
-                return res.status(200).json({
-                  success: true,
-                  message: 'User Authenticated.',
-                  token: token
-                });
-              }
+              res.status(200).json({
+                success: true,
+                message: 'User Authenticated.',
+                jwtoken: token,
+                redirect: bounceHost
+                })
            })
         }
         else {
@@ -181,27 +187,6 @@ apiRoutes.post('/authenticate', function(req, res) {
         }
       })
 
-      // used before passport and bcrypt
-      // if (user.verifyPassword(req.body.password)) {
-      //   res.json({success: false, message: 'Authentication failed. Wrong password.'})
-      // } else {
-      //   console.log('here');
-      //   // if user is found and password is right
-      //   //create a token
-      //   var token = jwt.sign({
-      //     name: user.name,
-      //     admin: user.admin
-      //   }, app.get('superSecret'), {
-      //     expiresInMinutes: 1440
-      //   });
-
-      //   //return the information including token as JSON
-      //   res.json({
-      //     success: true,
-      //     message: 'Enjoy your token',
-      //     token: token
-      //   });
-      // }
     }
   });
 });
